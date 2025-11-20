@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Caffeine Scramble - A Web Dev Survival Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #0a0a0a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            touch-action: none;
+        }
+        #game {
+            text-align: center;
+            position: relative;
+            max-width: 100vw;
+            overflow: hidden;
+        }
+        #hud {
+            color: #fff;
+            font-size: 22px;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-around;
+            padding: 20px;
+            background: #111;
+            border: 3px solid #2196F3;
+            border-radius: 5px;
+            max-width: 100%;
+        }
+        #strikeCounter {
+            position: absolute;
+            top: 80px;
+            left: 10px;
+            display: flex;
+            gap: 8px;
+            z-index: 5;
+        }
+        .strike {
+            font-size: 20px;
+            color: #330000 !important;
+            filter: brightness(0.3);
+        }
+        .strike.hit {
+            color: #ff0000 !important;
+            filter: brightness(1);
+        }
+        canvas {
+            display: block;
+            border: 3px solid #2196F3;
+            background: linear-gradient(180deg, #3e2723 0%, #4e342e 50%, #5d4037 100%);
+            cursor: none;
+            touch-action: none;
+            box-shadow: inset 0 0 100px rgba(0,0,0,0.5);
+            max-width: 100vw;
+            max-height: 80vh;
+            width: 100%;
+            height: auto;
+        }
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.95);
+            border: 4px solid #2196F3;
+            padding: 40px 60px;
+            border-radius: 10px;
+            display: none;
+            z-index: 10;
+        }
+        #gameOver.show {
+            display: block;
+        }
+        #gameOver h1 {
+            color: #ff0000;
+            font-size: 48px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 20px #ff0000;
+        }
+        #gameOver p {
+            color: #fff;
+            font-size: 24px;
+            margin: 15px 0;
+        }
+        #gameOver button {
+            background: #2196F3;
+            color: #fff;
+            border: none;
+            padding: 15px 40px;
+            font-size: 20px;
+            font-family: 'Courier New', monospace;
+            cursor: pointer;
+            margin-top: 20px;
+            border-radius: 5px;
+            transition: all 0.3s;
+        }
+        #gameOver button:hover {
+            background: #1976D2;
+            transform: scale(1.05);
+        }
+        .flavor-text {
+            color: #888;
+            font-size: 18px;
+            font-style: italic;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game">
+        <div id="hud">
+            <div>LEVEL: <span id="level">1</span></div>
+            <div>SCORE: <span id="score">0</span></div>
+        </div>
+        <div id="strikeCounter">
+            <span id="x1" class="strike">❌</span>
+            <span id="x2" class="strike">❌</span>
+            <span id="x3" class="strike">❌</span>
+        </div>
+        <canvas id="canvas" width="800" height="1000"></canvas>
+        <div id="gameOver">
+            <h1>COFFEE SUPPLIES DEPLETED</h1>
+            <p>Final Score: <span id="finalScore">0</span></p>
+            <p>Level Reached: <span id="finalLevel">1</span></p>
+            <p class="flavor-text" id="flavorText">Time to refactor your life</p>
+            <button id="restart">BREW AGAIN</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Game state
+        let gameRunning = false;
+        let score = 0;
+        let lives = 3;
+        let badItemCount = 0; // Track bad items caught
+        let level = 1;
+        let fallSpeed = 3.5;
+        let spawnRate = 30; // frames between spawns (even more items)
+        let frameCount = 0;
+        
+        // Player (mug)
+        const player = {
+            x: canvas.width / 2 - 60,
+            y: canvas.height - 120,
+            width: 120,
+            height: 90,
+            speed: 8,
+            dx: 0
+        };
+        
+        // Falling objects
+        let objects = [];
+        
+        // Controls
+        let keys = {};
+        let touchStartX = 0;
+        let touchX = 0;
+        let isDragging = false;
+        
+        // Item types
+        const itemTypes = {
+            bean: { text: 'BEAN', points: 10, good: true, color: '#4a3020' },
+            donut: { emoji: '🍩', points: 50, good: true, color: '#ff69b4' },
+            bug: { emoji: '❌', damage: 1, instantKill: false, good: false, color: '#ff0000' },
+            fire: { emoji: '🔥', damage: 1, instantKill: false, good: false, color: '#ff4500' },
+            skull: { emoji: '💀', damage: 999, instantKill: true, good: false, color: '#ffffff' }
+        };
+        
+        // Flavor text options
+        const flavorTexts = [
+            "Time to refactor your life",
+            "Stack Overflow is down... panic!",
+            "Client wants changes... again",
+            "Is this a bug or feature?",
+            "Merge conflict in progress",
+            "Production is on fire",
+            "Console.log won't save you now"
+        ];
+        
+        // Initialize game
+        function init() {
+            gameRunning = true;
+            score = 0;
+            lives = 3;
+            badItemCount = 0;
+            level = 1;
+            fallSpeed = 3.5;
+            spawnRate = 30;
+            objects = [];
+            frameCount = 0;
+            player.x = canvas.width / 2 - 60;
+            player.dx = 0;
+            
+            updateHUD();
+            document.getElementById('gameOver').classList.remove('show');
+            gameLoop();
+        }
+        
+        // Spawn falling object
+        function spawnObject() {
+            const rand = Math.random();
+            let type;
+            
+            // 50% good, 50% bad
+            if (rand < 0.50) {
+                // Good items
+                const goodRand = Math.random();
+                if (goodRand < 0.75) type = 'bean';
+                else type = 'donut';
+            } else {
+                // Bad items - skulls are 10% of bad items (doubled from 5%)
+                const badRand = Math.random();
+                if (badRand < 0.10) type = 'skull'; // 10% chance
+                else if (badRand < 0.55) type = 'bug'; // 45%
+                else type = 'fire'; // 45%
+            }
+            
+            // Spawn with wider boundaries - items are 60px, so keep them 80px from edges
+            objects.push({
+                x: Math.random() * (canvas.width - 160) + 80,
+                y: -80,
+                width: 60,
+                height: 60,
+                type: type,
+                rotation: Math.random() * Math.PI * 2
+            });
+        }
+        
+        // Update game state
+        function update() {
+            if (!gameRunning) return;
+            
+            frameCount++;
+            
+            // Move player
+            player.x += player.dx;
+            
+            // Boundary check
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+            
+            // Spawn objects
+            if (frameCount % spawnRate === 0) {
+                spawnObject();
+            }
+            
+            // Update falling objects
+            for (let i = objects.length - 1; i >= 0; i--) {
+                const obj = objects[i];
+                obj.y += fallSpeed;
+                obj.rotation += 0.05;
+                
+                // Bad items disappear when they reach the cup level (player.y)
+                const item = itemTypes[obj.type];
+                if (!item.good && obj.y >= player.y) {
+                    objects.splice(i, 1);
+                    continue;
+                }
+                
+                // Check collision with player
+                if (checkCollision(player, obj)) {
+                    handleCatch(obj);
+                    objects.splice(i, 1);
+                    continue;
+                }
+                
+                // Remove if off screen
+                if (obj.y > canvas.height) {
+                    objects.splice(i, 1);
+                }
+            }
+            
+            // Level progression
+            if (score >= level * 200) {
+                level++;
+                fallSpeed += 0.3;
+                if (spawnRate > 15) spawnRate -= 2;
+                updateHUD();
+            }
+        }
+        
+        // Check collision
+        function checkCollision(player, obj) {
+            return player.x < obj.x + obj.width &&
+                   player.x + player.width > obj.x &&
+                   player.y < obj.y + obj.height &&
+                   player.y + player.height > obj.y;
+        }
+        
+        // Handle catching object
+        function handleCatch(obj) {
+            const item = itemTypes[obj.type];
+            
+            if (item.good) {
+                score += item.points;
+                showScorePopup('+' + item.points, obj.x, obj.y, item.color);
+                updateHUD();
+            } else {
+                // Check if instant kill (skull)
+                if (item.instantKill) {
+                    badItemCount = 3; // Force game over
+                    flashScreen('#ff0000');
+                    shakeScreen();
+                    updateHUD();
+                    gameOver();
+                } else {
+                    // Regular bad item - add to counter
+                    badItemCount++;
+                    flashScreen('#ff0000');
+                    shakeScreen();
+                    updateHUD();
+                    
+                    if (badItemCount >= 3) {
+                        gameOver();
+                    }
+                }
+            }
+        }
+        
+        // Visual effects
+        function showScorePopup(text, x, y, color) {
+            // Draw on next frame
+            setTimeout(() => {
+                ctx.save();
+                ctx.fillStyle = color;
+                ctx.font = 'bold 24px Courier New';
+                ctx.fillText(text, x, y);
+                ctx.restore();
+            }, 0);
+        }
+        
+        function flashScreen(color) {
+            ctx.save();
+            ctx.fillStyle = color;
+            ctx.globalAlpha = 0.3;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.restore();
+        }
+        
+        function shakeScreen() {
+            canvas.style.transform = 'translate(5px, 5px)';
+            setTimeout(() => {
+                canvas.style.transform = 'translate(-5px, -5px)';
+                setTimeout(() => {
+                    canvas.style.transform = 'translate(0, 0)';
+                }, 50);
+            }, 50);
+        }
+        
+        // Draw everything
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = '#3e2723';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw coffee shop atmosphere (subtle decorative elements)
+            ctx.save();
+            ctx.globalAlpha = 0.15;
+            ctx.fillStyle = '#5d4037';
+            
+            // Decorative coffee stains/rings
+            for (let i = 0; i < 5; i++) {
+                ctx.beginPath();
+                ctx.arc(150 + i * 150, 100 + (i % 2) * 200, 40, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+            
+            // Draw falling objects
+            objects.forEach(obj => {
+                const item = itemTypes[obj.type];
+                
+                ctx.save();
+                ctx.translate(obj.x + obj.width/2, obj.y + obj.height/2);
+                ctx.rotate(obj.rotation);
+                
+                // Draw coffee bean specially
+                if (obj.type === 'bean') {
+                    // Dark brown coffee bean with thick black outline
+                    ctx.fillStyle = '#4a3020';
+                    ctx.strokeStyle = '#000000';
+                    ctx.lineWidth = 5;
+                    
+                    // Bean body (oval) - larger size
+                    ctx.beginPath();
+                    ctx.ellipse(0, 0, 22, 32, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                    
+                    // Bean crack/line in center (curved S-shape)
+                    ctx.strokeStyle = '#1a0f0a';
+                    ctx.lineWidth = 6;
+                    ctx.beginPath();
+                    ctx.moveTo(-9, -18);
+                    ctx.bezierCurveTo(-3, -9, 3, 9, 9, 18);
+                    ctx.stroke();
+                } else {
+                    // Draw emoji for other items - larger size
+                    ctx.font = '54px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(item.emoji, 0, 0);
+                }
+                
+                ctx.restore();
+            });
+            
+            // Draw player - empty coffee cup outline
+            ctx.save();
+            const cupX = player.x + player.width/2;
+            const cupY = player.y + player.height/2;
+            
+            // Draw empty cup (white outline) - larger size
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 5;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)'; // Very faint fill to show it's empty
+            
+            // Cup body (trapezoid shape) - scaled up
+            ctx.beginPath();
+            ctx.moveTo(cupX - 45, cupY - 30);
+            ctx.lineTo(cupX + 45, cupY - 30);
+            ctx.lineTo(cupX + 37, cupY + 37);
+            ctx.lineTo(cupX - 37, cupY + 37);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            
+            // Cup handle - larger
+            ctx.beginPath();
+            ctx.arc(cupX + 52, cupY, 18, -Math.PI/2, Math.PI/2);
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+        
+        // Update HUD
+        function updateHUD() {
+            document.getElementById('score').textContent = score;
+            document.getElementById('level').textContent = level;
+            
+            // Update strike counter
+            document.getElementById('x1').className = badItemCount >= 1 ? 'strike hit' : 'strike';
+            document.getElementById('x2').className = badItemCount >= 2 ? 'strike hit' : 'strike';
+            document.getElementById('x3').className = badItemCount >= 3 ? 'strike hit' : 'strike';
+        }
+        
+        // Game over
+        function gameOver() {
+            gameRunning = false;
+            document.getElementById('finalScore').textContent = score;
+            document.getElementById('finalLevel').textContent = level;
+            document.getElementById('flavorText').textContent = 
+                flavorTexts[Math.floor(Math.random() * flavorTexts.length)];
+            document.getElementById('gameOver').classList.add('show');
+        }
+        
+        // Game loop
+        function gameLoop() {
+            update();
+            draw();
+            
+            if (gameRunning) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+        
+        // Keyboard controls
+        document.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+            
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+                player.dx = -player.speed;
+            } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+                player.dx = player.speed;
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+            
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+                if (player.dx < 0) player.dx = 0;
+            } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+                if (player.dx > 0) player.dx = 0;
+            }
+        });
+        
+        // Touch controls (drag)
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            touchStartX = touch.clientX;
+            touchX = touch.clientX;
+            isDragging = true;
+        });
+        
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (!isDragging) return;
+            
+            const touch = e.touches[0];
+            const deltaX = touch.clientX - touchX;
+            touchX = touch.clientX;
+            
+            player.x += deltaX;
+            
+            // Boundary check
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+        });
+        
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            isDragging = false;
+        });
+        
+        // Restart button
+        document.getElementById('restart').addEventListener('click', () => {
+            init();
+        });
+        
+        // Start game
+        init();
+    </script>
+</body>
+</html>
