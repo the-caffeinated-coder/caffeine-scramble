@@ -1,0 +1,54 @@
+Categories:
+  - Games
+License: MIT
+AuthorName: Refined Web Solutions
+AuthorEmail: contact@refinedwebsolutions.com
+AuthorWebSite: https://refinedwebsolutions.com
+WebSite: https://refinedwebsolutions.com/caffeine-scramble
+SourceCode: https://github.com/YOUR_USERNAME/caffeine-scramble
+IssueTracker: https://github.com/YOUR_USERNAME/caffeine-scramble/issues
+
+AutoName: Caffeine Scramble
+
+RepoType: git
+Repo: https://github.com/YOUR_USERNAME/caffeine-scramble
+
+Summary: Web dev survival arcade game
+Description: |-
+    Caffeine Scramble is a fast-paced arcade game where you catch falling coffee
+    beans while avoiding bugs, fires, and deadly skulls. As a web developer trying
+    to survive production chaos, you must keep your coffee cup filled while dealing
+    with merge conflicts and production fires.
+    
+    Features:
+    * Simple one-touch controls
+    * Progressive difficulty
+    * Web dev themed humor
+    * No ads, no tracking, no permissions
+    * 100% open source
+    * Works offline
+    
+    Catch coffee beans and donuts for points, but avoid:
+    * Bugs (❌) - One strike each
+    * Fires (🔥) - One strike each  
+    * Skulls (💀) - Instant game over!
+    
+    Three strikes and you're out. How long can you survive the caffeine scramble?
+
+Builds:
+  - versionName: '1.0.0'
+    versionCode: 1
+    commit: v1.0.0
+    subdir: platforms/android/app
+    gradle:
+      - yes
+
+MaintainerNotes: |-
+    Built with Apache Cordova. The app is a simple HTML5 game with no external
+    dependencies or tracking. No special permissions required except vibrate for
+    haptic feedback.
+
+AutoUpdateMode: Version v%v
+UpdateCheckMode: Tags
+CurrentVersion: 1.0.0
+CurrentVersionCode: 1
